@@ -1,0 +1,49 @@
+{
+  "discipline": "Sociologia",
+  "doors": [
+    {
+      "id": "sociedade",
+      "label": "Sociedade e Sociologia",
+      "description": "Modernidade, surgimento da Sociologia, positivismo, Durkheim, Weber, Marx e fundamentos da análise sociológica."
+    },
+    {
+      "id": "cultura",
+      "label": "Cultura e desigualdades",
+      "description": "Cultura, socialização, identidade, antropologia, desigualdade, estratificação, raça, gênero, ideologia e indústria cultural."
+    },
+    {
+      "id": "poder",
+      "label": "Poder e cidadania",
+      "description": "Estado, poder, governo, democracia, regimes, cidadania, direitos, participação, eleições e movimentos sociais."
+    },
+    {
+      "id": "trabalho",
+      "label": "Trabalho e mundo contemporâneo",
+      "description": "Trabalho, capitalismo, organização produtiva, precarização, globalização, tecnologia, ambiente, migrações e xenofobia."
+    }
+  ],
+  "subtopics": [
+    "Modernidade e surgimento da Sociologia",
+    "Comte e positivismo",
+    "Durkheim",
+    "Weber",
+    "Marx e crítica ao capitalismo",
+    "Cultura e antropologia",
+    "Socialização e identidade",
+    "Desigualdade e estratificação",
+    "Raça, racismo, gênero e feminismos",
+    "Ideologia e indústria cultural",
+    "Estado, governo e poder",
+    "Democracia e regimes políticos",
+    "Cidadania e direitos",
+    "Participação, eleições e representação",
+    "Movimentos sociais e ação coletiva",
+    "Organização do trabalho",
+    "Precarização e capitalismo contemporâneo",
+    "Globalização",
+    "Tecnologia e sociedade",
+    "Ambiente e sustentabilidade",
+    "Migrações e xenofobia"
+  ],
+  "classification_rule": "Classifique pelo objeto principal efetivamente cobrado. Autor, vocabulário periférico e contexto transversal devem virar subtema/flags, não substituir o objeto principal."
+}
