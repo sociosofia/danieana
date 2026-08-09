@@ -1,0 +1,80 @@
+name: Question audit pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: Questions to process in this run
+        required: false
+        default: "80"
+  schedule:
+    - cron: "17,47 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: question-audit-pipeline
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Tests
+        env:
+          PYTHONPATH: src
+        run: pytest -q
+
+      - name: Check private input
+        id: input
+        shell: bash
+        run: |
+          if [ -f data/raw/sociology_questions_5170.json ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Raw bank is intentionally absent. Keep the workflow idle until private input is installed."
+          fi
+
+      - name: Audit next batch
+        if: steps.input.outputs.ready == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-mini' }}
+          BATCH_SIZE: ${{ inputs.batch_size || '80' }}
+          MAX_WORKERS: "4"
+          PYTHONPATH: src
+        run: python -m question_audit.pipeline
+
+      - name: Export queues
+        if: steps.input.outputs.ready == 'true'
+        env:
+          PYTHONPATH: src
+        run: python -m question_audit.export
+
+      - name: Commit checkpoint
+        if: steps.input.outputs.ready == 'true'
+        run: |
+          git config user.name "question-audit-bot"
+          git config user.email "question-audit-bot@users.noreply.github.com"
+          git add data/state data/output reports || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "audit next question batch"
+            git push
+          fi
