@@ -1,0 +1,12 @@
+{
+  "model_default": "gpt-5-mini",
+  "passes": 3,
+  "batch_size": 80,
+  "max_workers": 4,
+  "auto_ready_min_confidence": 0.80,
+  "review_min_confidence": 0.65,
+  "hold_images_by_default": true,
+  "max_attempts_per_question": 3,
+  "retry_review": true,
+  "retry_hold": false
+}
