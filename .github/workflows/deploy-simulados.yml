@@ -48,6 +48,72 @@ jobs:
           du -sh _site
           find _site -maxdepth 2 -type f | sort | head -100
 
+      - name: Enable native report sharing
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('_site/index.html')
+          s = p.read_text(encoding='utf-8')
+
+          old_button = 'Exportar relatório TXT para discussão'
+          new_button = 'Compartilhar relatório'
+          if old_button not in s:
+              raise SystemExit('Report button text not found')
+          s = s.replace(old_button, new_button, 1)
+
+          old_handler = '''$("#exportTeacher").onclick=()=>{
+            if(!last)return;
+            const chosen=$$(".discCheck").filter(x=>x.checked).length;
+            if(!chosen){alert("Selecione pelo menos uma questão para discussão.");return}
+            const blob=new Blob([teacherReportText()],{type:"text/plain;charset=utf-8"});
+            const a=document.createElement("a");
+            a.href=URL.createObjectURL(blob);
+            a.download=`relatorio_discussao_professor_${new Date().toISOString().slice(0,10)}.txt`;
+            document.body.appendChild(a);a.click();a.remove();
+            setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+          };'''
+
+          new_handler = '''$("#exportTeacher").onclick=async()=>{
+            if(!last)return;
+            const chosen=$$(".discCheck").filter(x=>x.checked).length;
+            if(!chosen){alert("Selecione pelo menos uma questão para discussão.");return}
+
+            const report=teacherReportText();
+            const filename=`relatorio_discussao_professor_${new Date().toISOString().slice(0,10)}.txt`;
+            const file=new File([report],filename,{type:"text/plain"});
+            const title="Relatório de Ciências Humanas — Ana e Dani";
+
+            try{
+              if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+                await navigator.share({title,text:"Relatório para discussão com o professor",files:[file]});
+                return;
+              }
+              if(navigator.share){
+                await navigator.share({title,text:report});
+                return;
+              }
+            }catch(err){
+              if(err?.name==="AbortError")return;
+              console.warn("Compartilhamento nativo indisponível; usando download.",err);
+            }
+
+            const blob=new Blob([report],{type:"text/plain;charset=utf-8"});
+            const a=document.createElement("a");
+            a.href=URL.createObjectURL(blob);
+            a.download=filename;
+            document.body.appendChild(a);a.click();a.remove();
+            setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+          };'''
+
+          if old_handler not in s:
+              raise SystemExit('Original report handler not found')
+          s = s.replace(old_handler, new_handler, 1)
+          p.write_text(s, encoding='utf-8')
+          print('Native sharing patch applied.')
+          PY
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
