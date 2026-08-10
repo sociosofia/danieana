@@ -59,9 +59,8 @@ jobs:
 
           old_button = 'Exportar relatório TXT para discussão'
           new_button = 'Compartilhar relatório'
-          if old_button not in s:
-              raise SystemExit('Report button text not found')
-          s = s.replace(old_button, new_button, 1)
+          if old_button in s:
+              s = s.replace(old_button, new_button, 1)
 
           old_handler = '''$("#exportTeacher").onclick=()=>{
             if(!last)return;
@@ -107,11 +106,124 @@ jobs:
             setTimeout(()=>URL.revokeObjectURL(a.href),1000);
           };'''
 
-          if old_handler not in s:
-              raise SystemExit('Original report handler not found')
-          s = s.replace(old_handler, new_handler, 1)
+          if old_handler in s:
+              s = s.replace(old_handler, new_handler, 1)
+
           p.write_text(s, encoding='utf-8')
-          print('Native sharing patch applied.')
+          print('Native sharing patch ready.')
+          PY
+
+      - name: Add safe app update system
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re
+
+          version = os.environ.get('GITHUB_SHA', 'local')[:12]
+
+          sw_path = Path('_site/sw.js')
+          sw = sw_path.read_text(encoding='utf-8')
+
+          sw = re.sub(
+              r'const CACHE_NAME="[^"]+";',
+              f'const CACHE_PREFIX="ana-dani-humanas-";\nconst CACHE_NAME=CACHE_PREFIX+"{version}";',
+              sw,
+              count=1,
+          )
+
+          # A nova versão deve esperar o estudante autorizar a troca.
+          sw = sw.replace('  self.skipWaiting();\n', '')
+          sw = sw.replace('self.skipWaiting();\n', '')
+
+          # Cache Storage é compartilhado por todos os projetos do mesmo domínio.
+          # Apague somente caches pertencentes ao DanieAna.
+          sw = re.sub(
+              r'caches\.keys\(\)\.then\(keys=>Promise\.all\(keys\.filter\(k=>k!==CACHE_NAME\)\.map\(k=>caches\.delete\(k\)\)\)\)',
+              'caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith(CACHE_PREFIX) && k!==CACHE_NAME).map(k=>caches.delete(k))))',
+              sw,
+              count=1,
+          )
+
+          message_handler = '''\nself.addEventListener("message",event=>{\n  if(event.data?.type==="SKIP_WAITING") self.skipWaiting();\n});\n'''
+          if 'SKIP_WAITING' not in sw:
+              marker = 'self.addEventListener("fetch",event=>{'
+              if marker not in sw:
+                  raise SystemExit('fetch handler marker not found in sw.js')
+              sw = sw.replace(marker, message_handler + '\n' + marker, 1)
+
+          sw_path.write_text(sw, encoding='utf-8')
+
+          index_path = Path('_site/index.html')
+          html = index_path.read_text(encoding='utf-8')
+
+          updater = r'''
+<style id="danieana-update-style">
+#danieanaUpdate{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;display:none;align-items:center;gap:8px;max-width:calc(100vw - 24px);padding:8px 10px 8px 12px;border:1px solid rgba(24,32,51,.14);border-radius:999px;background:#fff;box-shadow:0 8px 28px rgba(24,32,51,.18);font:600 13px/1.2 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#182033}
+#danieanaUpdate.show{display:flex}
+#danieanaUpdate button{border:0;border-radius:999px;background:#182033;color:#fff;padding:7px 10px;font:700 12px/1 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer}
+</style>
+<div id="danieanaUpdate" role="status" aria-live="polite"><span>✨ Tem novidade</span><button id="danieanaUpdateBtn" type="button">Atualizar</button></div>
+<script id="danieana-update-script">
+(()=>{
+  if(!("serviceWorker" in navigator))return;
+  const box=document.getElementById("danieanaUpdate");
+  const btn=document.getElementById("danieanaUpdateBtn");
+  let waiting=null;
+  let reloading=false;
+
+  const show=worker=>{
+    if(!worker)return;
+    waiting=worker;
+    box?.classList.add("show");
+  };
+
+  const watch=reg=>{
+    if(reg.waiting && navigator.serviceWorker.controller)show(reg.waiting);
+    reg.addEventListener("updatefound",()=>{
+      const worker=reg.installing;
+      if(!worker)return;
+      worker.addEventListener("statechange",()=>{
+        if(worker.state==="installed" && navigator.serviceWorker.controller)show(worker);
+      });
+    });
+  };
+
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{
+    if(reloading)return;
+    reloading=true;
+    location.reload();
+  });
+
+  btn?.addEventListener("click",()=>{
+    if(waiting){
+      btn.disabled=true;
+      btn.textContent="Atualizando…";
+      waiting.postMessage({type:"SKIP_WAITING"});
+    }
+  });
+
+  window.addEventListener("load",async()=>{
+    try{
+      const reg=(await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register("./sw.js"));
+      watch(reg);
+      reg.update().catch(()=>{});
+      setInterval(()=>reg.update().catch(()=>{}),60*60*1000);
+    }catch(err){
+      console.warn("Verificação de atualização indisponível.",err);
+    }
+  });
+})();
+</script>
+'''
+
+          if 'id="danieana-update-script"' not in html:
+              if '</body>' not in html:
+                  raise SystemExit('closing body tag not found in index.html')
+              html = html.replace('</body>', updater + '\n</body>', 1)
+
+          index_path.write_text(html, encoding='utf-8')
+          print(f'Update system applied. App version: {version}')
           PY
 
       - name: Configure GitHub Pages
