@@ -1,0 +1,60 @@
+name: Deploy Simulados da Ana e Dani
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Prepare site from final PWA package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+          test -f "$ZIP" || { echo "Missing $ZIP"; exit 1; }
+          rm -rf unpacked _site
+          mkdir -p unpacked _site
+          unzip -q "$ZIP" -d unpacked
+          if [ -f unpacked/index.html ]; then
+            cp -a unpacked/. _site/
+          else
+            ROOT="$(find unpacked -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+            test -n "$ROOT" && test -f "$ROOT/index.html" || { echo "index.html not found in package"; find unpacked -maxdepth 3 -type f | head -100; exit 1; }
+            cp -a "$ROOT"/. _site/
+          fi
+          test -f _site/index.html
+          echo "Prepared site:"
+          du -sh _site
+          find _site -maxdepth 2 -type f | sort | head -100
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
