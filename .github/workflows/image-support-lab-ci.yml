@@ -57,18 +57,24 @@ jobs:
           grep -q 'Baixando imagens das questões' _site/index.html
           grep -q 'QUESTION_IMAGE_CACHE="ana-dani-question-images-v1"' _site/index.html
           grep -q 'renderQuestionMedia(q);' _site/index.html
-          grep -q 'start=async function(ids=null)' _site/index.html
+          grep -q 'start=async function(...args)' _site/index.html
+          grep -q 'start(\[IMAGE_LAB_ID\],true)' _site/index.html
           test -f _site/media/q_image_lab.svg
           python3 - <<'PY'
           from pathlib import Path
           import re
           html=Path('_site/index.html').read_text(encoding='utf-8')
-          m=re.search(r'<script id="danieana-image-support-script">(.*?)</script>',html,re.S)
+          app_start=html.index('function startHumanasApp(){')
+          logic=html.index('const DANIEANA_IMAGE_ORIGINAL_START=start;')
+          app_end=html.index('\n}\n\n\n(async()=>',app_start)
+          if not (app_start < logic < app_end):
+              raise SystemExit('image support logic escaped startHumanasApp scope')
+          m=re.search(r'<script>\s*(function startHumanasApp\(\).*?)</script>',html,re.S)
           if not m:
-              raise SystemExit('image support script not found')
-          Path('/tmp/image-support.js').write_text(m.group(1),encoding='utf-8')
+              raise SystemExit('main application script not found')
+          Path('/tmp/danieana-app.js').write_text(m.group(1),encoding='utf-8')
           PY
-          node --check /tmp/image-support.js
+          node --check /tmp/danieana-app.js
 
       - name: Upload laboratory build
         uses: actions/upload-artifact@v4
