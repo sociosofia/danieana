@@ -1,0 +1,19 @@
+name: Diagnose GitHub Actions
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm Actions is running
+        run: |
+          echo "GitHub Actions is active for sociosofia/danieana"
+          echo "event=$GITHUB_EVENT_NAME"
+          echo "sha=$GITHUB_SHA"
