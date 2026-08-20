@@ -6,6 +6,7 @@ on:
     paths:
       - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
       - "scripts/patch_image_support.py"
+      - "scripts/patch_image_dependent_batch_1.py"
       - ".github/workflows/bake-image-support.yml"
   workflow_dispatch:
 
@@ -25,7 +26,7 @@ jobs:
         with:
           ref: main
 
-      - name: Bake image support into official PWA package
+      - name: Bake image support and approved image questions into official PWA package
         shell: bash
         run: |
           set -euo pipefail
@@ -37,21 +38,62 @@ jobs:
 
           if [ -f unpacked/index.html ]; then
             INDEX="unpacked/index.html"
+            SITE_ROOT="unpacked"
           else
             ROOT="$(find unpacked -mindepth 1 -maxdepth 1 -type d | head -n 1)"
             test -n "$ROOT" && test -f "$ROOT/index.html"
             INDEX="$ROOT/index.html"
+            SITE_ROOT="$ROOT"
           fi
 
-          if grep -q 'id="danieana-image-support-style"' "$INDEX"; then
-            echo "Image support is already baked into the package."
+          MEDIA="$SITE_ROOT/media/image-dependent"
+          if grep -q 'id="danieana-image-support-style"' "$INDEX" \
+            && grep -q 'const IMAGE_DEPENDENT_BATCH_1=' "$INDEX" \
+            && test -s "$MEDIA/q_4000245684.png" \
+            && test -s "$MEDIA/q_4000146570.jpeg" \
+            && test -s "$MEDIA/q_4000037773.png" \
+            && test -s "$MEDIA/q_4000305647.png" \
+            && test -s "$MEDIA/q_4000084413.png"; then
+            echo "Image support and approved image-dependent batch are already baked into the package."
             echo "BAKED=0" >> "$GITHUB_ENV"
             exit 0
           fi
 
-          python3 scripts/patch_image_support.py "$INDEX"
+          if ! grep -q 'id="danieana-image-support-style"' "$INDEX"; then
+            python3 scripts/patch_image_support.py "$INDEX"
+          fi
+
+          mkdir -p "$MEDIA"
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/83c94b0999c1ef9f4fd2ec709a1fb2fa2e2e5901.png" \
+            -o "$MEDIA/q_4000245684.png"
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/797f5e117aaef8f8420ac8754426ec866c40833b.jpeg" \
+            -o "$MEDIA/q_4000146570.jpeg"
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/70fc356d12f663bb8afbd955d3138ed12fb42718.png" \
+            -o "$MEDIA/q_4000037773.png"
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/eec00dc390ee45763dc6369c2fc139e558fbc1c7.png" \
+            -o "$MEDIA/q_4000305647.png"
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/822e3c514b208005101a0542792a6b31f684ed56.png" \
+            -o "$MEDIA/q_4000084413.png"
+
+          python3 scripts/patch_image_dependent_batch_1.py "$INDEX"
+
           grep -q 'QUESTION_IMAGE_CACHE="ana-dani-question-images-v1"' "$INDEX"
           grep -q 'Baixando imagens das questões' "$INDEX"
+          grep -q 'const IMAGE_DEPENDENT_BATCH_1=' "$INDEX"
+          grep -q 'SOC-4000245684' "$INDEX"
+          grep -q 'SOC-4000146570' "$INDEX"
+          grep -q 'SOC-4000037773' "$INDEX"
+          grep -q 'SOC-4000305647' "$INDEX"
+          grep -q 'SOC-4000084413' "$INDEX"
+          if grep -q 'imagePilot' "$INDEX"; then
+            echo "Pilot route leaked into production package." >&2
+            exit 1
+          fi
 
           rm -f "${ZIP}.new"
           (cd unpacked && zip -qr "../${ZIP}.new" .)
@@ -67,5 +109,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- Simulados_Ana_Dani_Humanas_FINAL_PWA.zip
           git diff --cached --quiet && exit 0
-          git commit -m "Bake image support into PWA package"
+          git commit -m "Bake approved image questions into PWA package"
           git push origin HEAD:main
