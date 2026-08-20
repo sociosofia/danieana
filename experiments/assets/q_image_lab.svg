@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" role="img" aria-labelledby="title desc">
+  <title id="title">Gráfico experimental</title>
+  <desc id="desc">Três barras com valores 30, 55 e 80, em ordem crescente.</desc>
+  <rect width="800" height="500" fill="#fffdf8"/>
+  <text x="400" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#182033">Gráfico experimental</text>
+  <line x1="120" y1="400" x2="700" y2="400" stroke="#697184" stroke-width="3"/>
+  <line x1="120" y1="100" x2="120" y2="400" stroke="#697184" stroke-width="3"/>
+  <rect x="190" y="310" width="110" height="90" rx="6" fill="#e7b84b"/>
+  <rect x="355" y="235" width="110" height="165" rx="6" fill="#d7a932"/>
+  <rect x="520" y="160" width="110" height="240" rx="6" fill="#bd8f1e"/>
+  <text x="245" y="295" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#182033">30</text>
+  <text x="410" y="220" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#182033">55</text>
+  <text x="575" y="145" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#182033">80</text>
+  <text x="245" y="438" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#182033">A</text>
+  <text x="410" y="438" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#182033">B</text>
+  <text x="575" y="438" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#182033">C</text>
+  <text x="30" y="250" transform="rotate(-90 30 250)" text-anchor="middle" font-family="Arial, sans-serif" font-size="19" fill="#697184">valor</text>
+</svg>
