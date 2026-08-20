@@ -1,2 +1,3 @@
 Probe created on 2026-08-20 to verify pull_request-triggered GitHub Actions.
 Retrigger after enabling pull_request_target for the Pages deploy.
+Retrigger after fixing local 512px HeloeSthe icon generation.
