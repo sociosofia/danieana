@@ -1,0 +1,39 @@
+name: Mass Migration Inventory Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/probe_mass_migration_source.py"
+      - "scripts/inventory_image_dependent_mass.py"
+      - "data/image-dependent-migration/**"
+      - ".github/workflows/image-dependent-mass-inventory.yml"
+      - ".github/workflows/mass-migration-inventory-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-probe:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR candidate
+        uses: actions/checkout@v6
+
+      - name: Probe source API
+        run: |
+          set -euo pipefail
+          test -f scripts/probe_mass_migration_source.py
+          python3 scripts/probe_mass_migration_source.py mass-migration-probe | tee mass-migration-probe.log
+
+      - name: Upload source probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: danieana-mass-migration-source-probe
+          path: |
+            mass-migration-probe
+            mass-migration-probe.log
+          retention-days: 7
