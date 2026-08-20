@@ -1,0 +1,35 @@
+name: Image Dependent Mass Inventory
+
+on:
+  push:
+    branches:
+      - feature/image-dependent-mass-migration
+    paths:
+      - "scripts/probe_mass_migration_source.py"
+      - ".github/workflows/image-dependent-mass-inventory.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Probe source API
+        run: |
+          set -euo pipefail
+          python3 scripts/probe_mass_migration_source.py mass-migration-probe | tee mass-migration-probe.log
+
+      - name: Upload source probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: danieana-mass-migration-source-probe
+          path: |
+            mass-migration-probe
+            mass-migration-probe.log
+          retention-days: 7
