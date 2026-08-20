@@ -9,6 +9,14 @@ on:
       - "experiments/assets/q_image_lab.svg"
       - ".github/workflows/image-support-lab-ci.yml"
       - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/patch_image_support.py"
+      - "experiments/assets/q_image_lab.svg"
+      - ".github/workflows/image-support-lab-ci.yml"
+      - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
   workflow_dispatch:
 
 permissions:
