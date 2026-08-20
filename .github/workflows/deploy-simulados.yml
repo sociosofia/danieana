@@ -1,4 +1,5 @@
 name: Deploy DaniAna and HeloeSthe
+# diagnostic PR: exercise the real Pages deployment path
 
 on:
   push:
