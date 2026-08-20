@@ -1,0 +1,123 @@
+name: Test H/G Mass Image Migration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/build_mass_image_bank.py"
+      - "scripts/patch_mass_image_bank_loader.py"
+      - "scripts/patch_option_image_support.py"
+      - "data/image-dependent-migration/**"
+      - ".github/workflows/test-mass-image-migration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+
+      - name: Prepare laboratory copy of the current PWA
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+          test -f "$ZIP"
+          rm -rf lab-unpacked lab-site
+          mkdir -p lab-unpacked lab-site
+          unzip -q "$ZIP" -d lab-unpacked
+          if [ -f lab-unpacked/index.html ]; then
+            cp -a lab-unpacked/. lab-site/
+          else
+            ROOT="$(find lab-unpacked -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+            test -n "$ROOT" && test -f "$ROOT/index.html"
+            cp -a "$ROOT"/. lab-site/
+          fi
+          test -f lab-site/index.html
+          grep -q 'id="danieana-image-support-style"' lab-site/index.html
+          grep -q 'const DANIEANA_DOCX_REPORT_SHARE_V1=true;' lab-site/index.html
+
+      - name: Patch laboratory UI for migrated bank and option images
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/patch_option_image_support.py lab-site/index.html
+          python3 scripts/patch_mass_image_bank_loader.py lab-site/index.html
+          grep -q 'danieana-option-image-support-v1' lab-site/index.html
+          grep -q 'image-migrated.js' lab-site/index.html
+
+      - name: Build and download H/G migration assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build_mass_image_bank.py \
+            --site lab-site \
+            --parts-dir data/image-dependent-migration \
+            --report mass-migration-build-report.json
+
+      - name: Verify migration gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          r=json.loads(Path('mass-migration-build-report.json').read_text(encoding='utf-8'))
+          assert r['version']=='1.2', r
+          assert r['questions']==322, r
+          assert r['by_discipline']=={'historia':195,'geografia':127}, r
+          assert r['questions_with_visible_media']==104, r
+          assert r['assets']==503, r
+          assert r['residual']==26, r
+          assert r['residual_by_discipline']=={'historia':18,'geografia':8}, r
+          assert r['duplicate_cross_discipline_total']==5, r
+          assert r['failures']==[], r
+          assert r['asset_bytes']>0, r
+
+          bank=Path('lab-site/banks/image-migrated.js')
+          assert bank.is_file() and bank.stat().st_size>10000
+          media=[p for p in Path('lab-site/media/image-dependent').rglob('*') if p.is_file()]
+          migrated=[p for p in media if '/historia/' in p.as_posix() or '/geografia/' in p.as_posix()]
+          assert len(migrated)==503, len(migrated)
+          print('Gates OK:', {k:r[k] for k in ('questions','questions_with_visible_media','assets','residual','asset_bytes')})
+          PY
+          node --check lab-site/banks/image-migrated.js
+
+      - name: Verify application JavaScript after patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('lab-site/index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',html,re.S|re.I)
+          if not scripts:
+              raise SystemExit('No inline app script found')
+          Path('/tmp/danieana-lab-main.js').write_text(max(scripts,key=len),encoding='utf-8')
+          PY
+          node --check /tmp/danieana-lab-main.js
+
+      - name: Package laboratory artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f DaniAna_HG_Image_Migration_Lab.zip
+          (cd lab-site && zip -qr ../DaniAna_HG_Image_Migration_Lab.zip .)
+          test -s DaniAna_HG_Image_Migration_Lab.zip
+
+      - name: Upload laboratory artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: danieana-hg-image-migration-lab
+          path: |
+            DaniAna_HG_Image_Migration_Lab.zip
+            mass-migration-build-report.json
+          if-no-files-found: error
+          retention-days: 7
