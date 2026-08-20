@@ -1,0 +1,120 @@
+name: Image Dependent Batch 1 CI
+
+on:
+  push:
+    branches:
+      - feature/image-dependent-pilot-1
+    paths:
+      - "scripts/patch_image_support.py"
+      - "scripts/patch_image_dependent_batch_1.py"
+      - ".github/workflows/image-dependent-batch-1-ci.yml"
+      - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/patch_image_support.py"
+      - "scripts/patch_image_dependent_batch_1.py"
+      - ".github/workflows/image-dependent-batch-1-ci.yml"
+      - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-production-batch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build production candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+          test -f "$ZIP"
+          rm -rf unpacked _site
+          mkdir -p unpacked _site
+          unzip -q "$ZIP" -d unpacked
+          if [ -f unpacked/index.html ]; then
+            cp -a unpacked/. _site/
+          else
+            ROOT="$(find unpacked -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+            test -n "$ROOT" && test -f "$ROOT/index.html"
+            cp -a "$ROOT"/. _site/
+          fi
+          test -f _site/index.html
+
+          if ! grep -q 'id="danieana-image-support-style"' _site/index.html; then
+            python3 scripts/patch_image_support.py _site/index.html
+          fi
+
+          mkdir -p _site/media/image-dependent
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/83c94b0999c1ef9f4fd2ec709a1fb2fa2e2e5901.png" \
+            -o _site/media/image-dependent/q_4000245684.png
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/797f5e117aaef8f8420ac8754426ec866c40833b.jpeg" \
+            -o _site/media/image-dependent/q_4000146570.jpeg
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/70fc356d12f663bb8afbd955d3138ed12fb42718.png" \
+            -o _site/media/image-dependent/q_4000037773.png
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/eec00dc390ee45763dc6369c2fc139e558fbc1c7.png" \
+            -o _site/media/image-dependent/q_4000305647.png
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/822e3c514b208005101a0542792a6b31f684ed56.png" \
+            -o _site/media/image-dependent/q_4000084413.png
+
+          python3 scripts/patch_image_dependent_batch_1.py _site/index.html
+
+      - name: Validate production candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'const IMAGE_DEPENDENT_BATCH_1=' _site/index.html
+          grep -q 'SOC-4000245684' _site/index.html
+          grep -q 'SOC-4000146570' _site/index.html
+          grep -q 'SOC-4000037773' _site/index.html
+          grep -q 'SOC-4000305647' _site/index.html
+          grep -q 'SOC-4000084413' _site/index.html
+          grep -q 'QUESTION_IMAGE_CACHE="ana-dani-question-images-v1"' _site/index.html
+          if grep -q 'imagePilot' _site/index.html; then
+            echo 'Pilot route leaked into production candidate.' >&2
+            exit 1
+          fi
+
+          for f in \
+            _site/media/image-dependent/q_4000245684.png \
+            _site/media/image-dependent/q_4000146570.jpeg \
+            _site/media/image-dependent/q_4000037773.png \
+            _site/media/image-dependent/q_4000305647.png \
+            _site/media/image-dependent/q_4000084413.png; do
+            test -s "$f"
+            file "$f" | grep -qi 'image data'
+          done
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('_site/index.html').read_text(encoding='utf-8')
+          app_start=html.index('function startHumanasApp(){')
+          batch=html.index('const IMAGE_DEPENDENT_BATCH_1=', app_start)
+          app_end=html.index('\n}\n\n\n(async()=>', app_start)
+          if not (app_start < batch < app_end):
+              raise SystemExit('approved image-dependent batch escaped startHumanasApp scope')
+          m=re.search(r'<script>\s*(function startHumanasApp\(\).*?)</script>',html,re.S)
+          if not m:
+              raise SystemExit('main application script not found')
+          Path('/tmp/danieana-production-batch.js').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/danieana-production-batch.js
+
+      - name: Upload production candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: danieana-image-dependent-batch-1-production-candidate
+          path: _site
+          retention-days: 7
