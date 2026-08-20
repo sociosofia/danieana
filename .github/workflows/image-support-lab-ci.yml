@@ -1,0 +1,70 @@
+name: Image Support Lab CI
+
+on:
+  push:
+    branches:
+      - feature/image-support-lab
+    paths:
+      - "scripts/patch_image_support.py"
+      - "experiments/assets/q_image_lab.svg"
+      - ".github/workflows/image-support-lab-ci.yml"
+      - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-lab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build current PWA package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+          test -f "$ZIP"
+          rm -rf unpacked _site
+          mkdir -p unpacked _site/media
+          unzip -q "$ZIP" -d unpacked
+          if [ -f unpacked/index.html ]; then
+            cp -a unpacked/. _site/
+          else
+            ROOT="$(find unpacked -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+            test -n "$ROOT" && test -f "$ROOT/index.html"
+            cp -a "$ROOT"/. _site/
+          fi
+          test -f _site/index.html
+          cp experiments/assets/q_image_lab.svg _site/media/q_image_lab.svg
+          python3 scripts/patch_image_support.py _site/index.html
+
+      - name: Validate patched app
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'danieana-image-support-style' _site/index.html
+          grep -q 'Baixando imagens das questões' _site/index.html
+          grep -q 'QUESTION_IMAGE_CACHE="ana-dani-question-images-v1"' _site/index.html
+          grep -q 'renderQuestionMedia(q);' _site/index.html
+          grep -q 'async function start(ids=null)' _site/index.html
+          test -f _site/media/q_image_lab.svg
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('_site/index.html').read_text(encoding='utf-8')
+          m=re.search(r'<script id="danieana-image-support-script">(.*?)</script>',html,re.S)
+          if not m:
+              raise SystemExit('image support script not found')
+          Path('/tmp/image-support.js').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/image-support.js
+
+      - name: Upload laboratory build
+        uses: actions/upload-artifact@v4
+        with:
+          name: danieana-image-support-lab
+          path: _site
+          retention-days: 7
