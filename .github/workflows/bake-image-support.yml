@@ -7,6 +7,10 @@ on:
       - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
       - "scripts/patch_image_support.py"
       - "scripts/patch_image_dependent_batch_1.py"
+      - "scripts/patch_option_image_support.py"
+      - "scripts/patch_mass_image_bank_loader.py"
+      - "scripts/build_mass_image_bank.py"
+      - "data/image-dependent-migration/**"
       - ".github/workflows/bake-image-support.yml"
   workflow_dispatch:
 
@@ -20,13 +24,14 @@ concurrency:
 jobs:
   bake:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           ref: main
 
-      - name: Bake image support and approved image questions into official PWA package
+      - name: Bake image support and recovered image questions into official PWA package
         shell: bash
         run: |
           set -euo pipefail
@@ -47,14 +52,19 @@ jobs:
           fi
 
           MEDIA="$SITE_ROOT/media/image-dependent"
+          MASS_BANK="$SITE_ROOT/banks/image-migrated.js"
+
           if grep -q 'id="danieana-image-support-style"' "$INDEX" \
             && grep -q 'const IMAGE_DEPENDENT_BATCH_1=' "$INDEX" \
+            && grep -q 'danieana-option-image-support' "$INDEX" \
+            && grep -q 'image-migrated.js' "$INDEX" \
+            && test -s "$MASS_BANK" \
             && test -s "$MEDIA/q_4000245684.png" \
             && test -s "$MEDIA/q_4000146570.jpeg" \
             && test -s "$MEDIA/q_4000037773.png" \
             && test -s "$MEDIA/q_4000305647.png" \
             && test -s "$MEDIA/q_4000084413.png"; then
-            echo "Image support and approved image-dependent batch are already baked into the package."
+            echo "Image support and recovered image-dependent bank are already baked into the package."
             echo "BAKED=0" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -81,6 +91,12 @@ jobs:
             -o "$MEDIA/q_4000084413.png"
 
           python3 scripts/patch_image_dependent_batch_1.py "$INDEX"
+          python3 scripts/patch_option_image_support.py "$INDEX"
+          python3 scripts/patch_mass_image_bank_loader.py "$INDEX"
+          python3 scripts/build_mass_image_bank.py \
+            --site "$SITE_ROOT" \
+            --parts-dir data/image-dependent-migration \
+            --report mass-migration-build-report.json
 
           grep -q 'QUESTION_IMAGE_CACHE="ana-dani-question-images-v1"' "$INDEX"
           grep -q 'Baixando imagens das questões' "$INDEX"
@@ -90,10 +106,26 @@ jobs:
           grep -q 'SOC-4000037773' "$INDEX"
           grep -q 'SOC-4000305647' "$INDEX"
           grep -q 'SOC-4000084413' "$INDEX"
+          grep -q 'danieana-option-image-support' "$INDEX"
+          grep -q 'image-migrated.js' "$INDEX"
+          test -s "$MASS_BANK"
           if grep -q 'imagePilot' "$INDEX"; then
             echo "Pilot route leaked into production package." >&2
             exit 1
           fi
+
+          python3 - <<'PY'
+          import json
+          r=json.load(open('mass-migration-build-report.json',encoding='utf-8'))
+          assert r['questions']==324, r
+          assert set(r['by_discipline'])=={'historia','geografia'}, r
+          assert r['questions_with_visible_media']==109, r
+          assert r['assets']==525, r
+          assert r['residual']==29, r
+          assert r['failures']==[], r
+          assert r['asset_bytes']>0, r
+          print('Mass migration baked:',r['by_discipline'],'assets:',r['assets'],'bytes:',r['asset_bytes'])
+          PY
 
           rm -f "${ZIP}.new"
           (cd unpacked && zip -qr "../${ZIP}.new" .)
@@ -109,5 +141,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- Simulados_Ana_Dani_Humanas_FINAL_PWA.zip
           git diff --cached --quiet && exit 0
-          git commit -m "Bake approved image questions into PWA package"
+          git commit -m "Bake mass image migration into PWA package"
           git push origin HEAD:main
