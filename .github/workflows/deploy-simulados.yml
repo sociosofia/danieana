@@ -10,6 +10,15 @@ on:
       - "scripts/patch_heloesthe_subsite.py"
       - "branding/heloesthe/**"
       - ".github/workflows/deploy-simulados.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+      - "scripts/patch_safe_update.py"
+      - "scripts/stage_heloesthe_subsite.py"
+      - "scripts/patch_heloesthe_subsite.py"
+      - "branding/heloesthe/**"
+      - ".github/workflows/deploy-simulados.yml"
   workflow_dispatch:
 
 permissions:
