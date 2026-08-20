@@ -81,9 +81,19 @@ jobs:
 
           mkdir -p _site/heloesthe/icons
           base64 -d branding/heloesthe/icon-192.png.b64 > _site/heloesthe/icons/icon-192.png
-          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
-            "https://raw.githubusercontent.com/sociosofia/heloesthe/main/branding/icon-512.png.b64" \
-            | base64 -d > _site/heloesthe/icons/icon-512.png
+
+          # Generate the 512px PWA icon from the validated local 192px source.
+          # This avoids depending on a remote base64 file during deployment.
+          if command -v convert >/dev/null 2>&1; then
+            convert _site/heloesthe/icons/icon-192.png -resize 512x512 _site/heloesthe/icons/icon-512.png
+          else
+            python3 -m pip install --quiet pillow
+            python3 - <<'PY'
+          from PIL import Image
+          src=Image.open('_site/heloesthe/icons/icon-192.png').convert('RGBA')
+          src.resize((512,512),Image.Resampling.LANCZOS).save('_site/heloesthe/icons/icon-512.png')
+          PY
+          fi
 
           file _site/heloesthe/icons/icon-192.png | grep -qi 'PNG image data, 192 x 192'
           file _site/heloesthe/icons/icon-512.png | grep -qi 'PNG image data, 512 x 512'
