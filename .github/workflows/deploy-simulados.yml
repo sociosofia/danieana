@@ -1,5 +1,6 @@
 name: Deploy DaniAna and HeloeSthe
 # diagnostic PR: exercise the real Pages deployment path
+# retrigger after local 512px icon generation fix
 
 on:
   push:
