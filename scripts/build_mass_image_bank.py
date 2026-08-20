@@ -4,8 +4,6 @@ import argparse
 import base64
 import gzip
 import json
-import mimetypes
-import re
 import urllib.request
 
 UA='DaniAnaMassImageMigration/1.0 (+https://github.com/sociosofia/danieana)'
@@ -27,7 +25,8 @@ def looks_like_image(raw:bytes, content_type:str=''):
     if ct.startswith('image/'):
         return True
     signatures=(b'\x89PNG\r\n\x1a\n',b'\xff\xd8\xff',b'GIF87a',b'GIF89a',b'RIFF')
-    if raw.startswith(signatures): return True
+    if raw.startswith(signatures):
+        return True
     head=raw[:300].lstrip().lower()
     return head.startswith(b'<svg') or b'<svg' in head
 
@@ -85,7 +84,6 @@ def main():
     if len(source_ids)!=len(set(source_ids)):
         raise SystemExit('Duplicate migrated sourceQuestionIds detected.')
 
-    valid_labels={'A','B','C','D','E','Certo','Errado'}
     for q in questions:
         opts=q.get('options') or []
         if len(opts)<2:
@@ -99,7 +97,7 @@ def main():
     downloaded=[]
     failures=[]
     if not args.skip_downloads:
-        for i,asset in enumerate(assets,1):
+        for asset in assets:
             rel=str(asset['path']).removeprefix('./')
             dest=site/rel
             try:
