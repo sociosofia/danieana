@@ -7,6 +7,7 @@ on:
       - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
       - "scripts/patch_image_support.py"
       - "scripts/patch_image_dependent_batch_1.py"
+      - "scripts/patch_report_docx_share.py"
       - ".github/workflows/bake-image-support.yml"
   workflow_dispatch:
 
@@ -26,7 +27,7 @@ jobs:
         with:
           ref: main
 
-      - name: Bake image support and approved image questions into official PWA package
+      - name: Bake image support, approved image questions and DOCX report sharing into official PWA package
         shell: bash
         run: |
           set -euo pipefail
@@ -49,12 +50,13 @@ jobs:
           MEDIA="$SITE_ROOT/media/image-dependent"
           if grep -q 'id="danieana-image-support-style"' "$INDEX" \
             && grep -q 'const IMAGE_DEPENDENT_BATCH_1=' "$INDEX" \
+            && grep -q 'const DANIEANA_DOCX_REPORT_SHARE_V1=true;' "$INDEX" \
             && test -s "$MEDIA/q_4000245684.png" \
             && test -s "$MEDIA/q_4000146570.jpeg" \
             && test -s "$MEDIA/q_4000037773.png" \
             && test -s "$MEDIA/q_4000305647.png" \
             && test -s "$MEDIA/q_4000084413.png"; then
-            echo "Image support and approved image-dependent batch are already baked into the package."
+            echo "Image support, approved image-dependent batch and DOCX reporting are already baked into the package."
             echo "BAKED=0" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -64,27 +66,46 @@ jobs:
           fi
 
           mkdir -p "$MEDIA"
-          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
-            "https://bq.drivedepobre.com/bq/img/83c94b0999c1ef9f4fd2ec709a1fb2fa2e2e5901.png" \
-            -o "$MEDIA/q_4000245684.png"
-          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
-            "https://bq.drivedepobre.com/bq/img/797f5e117aaef8f8420ac8754426ec866c40833b.jpeg" \
-            -o "$MEDIA/q_4000146570.jpeg"
-          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
-            "https://bq.drivedepobre.com/bq/img/70fc356d12f663bb8afbd955d3138ed12fb42718.png" \
-            -o "$MEDIA/q_4000037773.png"
-          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
-            "https://bq.drivedepobre.com/bq/img/eec00dc390ee45763dc6369c2fc139e558fbc1c7.png" \
-            -o "$MEDIA/q_4000305647.png"
-          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
-            "https://bq.drivedepobre.com/bq/img/822e3c514b208005101a0542792a6b31f684ed56.png" \
-            -o "$MEDIA/q_4000084413.png"
+          if [ ! -s "$MEDIA/q_4000245684.png" ]; then
+            curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+              "https://bq.drivedepobre.com/bq/img/83c94b0999c1ef9f4fd2ec709a1fb2fa2e2e5901.png" \
+              -o "$MEDIA/q_4000245684.png"
+          fi
+          if [ ! -s "$MEDIA/q_4000146570.jpeg" ]; then
+            curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+              "https://bq.drivedepobre.com/bq/img/797f5e117aaef8f8420ac8754426ec866c40833b.jpeg" \
+              -o "$MEDIA/q_4000146570.jpeg"
+          fi
+          if [ ! -s "$MEDIA/q_4000037773.png" ]; then
+            curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+              "https://bq.drivedepobre.com/bq/img/70fc356d12f663bb8afbd955d3138ed12fb42718.png" \
+              -o "$MEDIA/q_4000037773.png"
+          fi
+          if [ ! -s "$MEDIA/q_4000305647.png" ]; then
+            curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+              "https://bq.drivedepobre.com/bq/img/eec00dc390ee45763dc6369c2fc139e558fbc1c7.png" \
+              -o "$MEDIA/q_4000305647.png"
+          fi
+          if [ ! -s "$MEDIA/q_4000084413.png" ]; then
+            curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+              "https://bq.drivedepobre.com/bq/img/822e3c514b208005101a0542792a6b31f684ed56.png" \
+              -o "$MEDIA/q_4000084413.png"
+          fi
 
-          python3 scripts/patch_image_dependent_batch_1.py "$INDEX"
+          if ! grep -q 'const IMAGE_DEPENDENT_BATCH_1=' "$INDEX"; then
+            python3 scripts/patch_image_dependent_batch_1.py "$INDEX"
+          fi
+          if ! grep -q 'const DANIEANA_DOCX_REPORT_SHARE_V1=true;' "$INDEX"; then
+            python3 scripts/patch_report_docx_share.py "$INDEX"
+          fi
 
           grep -q 'QUESTION_IMAGE_CACHE="ana-dani-question-images-v1"' "$INDEX"
           grep -q 'Baixando imagens das questões' "$INDEX"
           grep -q 'const IMAGE_DEPENDENT_BATCH_1=' "$INDEX"
+          grep -q 'const DANIEANA_DOCX_REPORT_SHARE_V1=true;' "$INDEX"
+          grep -q 'Compartilhar relatório DOCX' "$INDEX"
+          grep -q 'navigator.share' "$INDEX"
+          grep -q 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' "$INDEX"
           grep -q 'SOC-4000245684' "$INDEX"
           grep -q 'SOC-4000146570' "$INDEX"
           grep -q 'SOC-4000037773' "$INDEX"
@@ -109,5 +130,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- Simulados_Ana_Dani_Humanas_FINAL_PWA.zip
           git diff --cached --quiet && exit 0
-          git commit -m "Bake approved image questions into PWA package"
+          git commit -m "Bake image support and DOCX report sharing into PWA package"
           git push origin HEAD:main
