@@ -8,6 +8,9 @@ from pathlib import Path
 
 src = Path(sys.argv[1] if len(sys.argv) > 1 else '/tmp/hg-v1.part01.b64')
 raw = ''.join(src.read_text(encoding='utf-8').split())
+# The canonical development snapshot was stored without final Base64 padding.
+# Restore it deterministically instead of treating the payload as corrupt.
+raw += '=' * (-len(raw) % 4)
 data = json.loads(gzip.decompress(base64.b64decode(raw)).decode('utf-8'))
 
 questions = list(data.get('questions') or [])
