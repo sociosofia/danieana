@@ -3,7 +3,7 @@ name: Image Support Production CI
 on:
   push:
     branches:
-      - feature/image-support-lab
+      - main
     paths:
       - "scripts/patch_image_support.py"
       - ".github/workflows/image-support-production-ci.yml"
