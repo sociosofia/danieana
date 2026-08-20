@@ -1,4 +1,5 @@
 name: Bake HeloeSthe subsite into DaniAna PWA
+# Triggered after initial workflow registration on main.
 
 on:
   push:
