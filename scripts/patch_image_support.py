@@ -10,16 +10,10 @@ if f'id="{STYLE_ID}"' in html:
     print("Image support already present; nothing to do.")
     raise SystemExit(0)
 
-old_start = 'function start(ids=null){let qs=choose(ids);if(!qs.length)return;S.session={id:"S-"+Date.now(),mode:S.mode,timerOn:S.timer,startedAt:Date.now(),elapsedBefore:0,current:0,questions:qs,answers:{},completed:false};set(K.active,S.session);screen("#quiz");renderQ();startTimer()}'
-new_start = 'async function start(ids=null){let qs=choose(ids);if(!qs.length)return;try{await prepareQuestionImages(qs)}catch(err){console.error("Falha ao preparar imagens do simulado.",err);alert("Não consegui baixar todas as imagens deste simulado. Verifique sua conexão e tente novamente.");return}S.session={id:"S-"+Date.now(),mode:S.mode,timerOn:S.timer,startedAt:Date.now(),elapsedBefore:0,current:0,questions:qs,answers:{},completed:false};set(K.active,S.session);screen("#quiz");renderQ();startTimer()}'
-if old_start not in html:
-    raise SystemExit("Image patch aborted: start() marker not found.")
-html = html.replace(old_start, new_start, 1)
-
-render_marker = '$("#support").style.display=q.support?"block":"none";'
-if render_marker not in html:
-    raise SystemExit("Image patch aborted: renderQ() marker not found.")
-html = html.replace(render_marker, render_marker + 'renderQuestionMedia(q);', 1)
+required_markers = ["function start", "function renderQ", "function choose", "const QUESTIONS"]
+missing = [marker for marker in required_markers if marker not in html]
+if missing:
+    raise SystemExit("Image patch aborted: core markers not found: " + ", ".join(missing))
 
 injection = r'''
 <style id="danieana-image-support-style">
@@ -83,6 +77,35 @@ injection = r'''
 <script id="danieana-image-support-script">
 const QUESTION_IMAGE_CACHE="ana-dani-question-images-v1";
 let QUESTION_IMAGE_OBJECT_URLS=[];
+
+const DANIEANA_IMAGE_ORIGINAL_START=start;
+const DANIEANA_IMAGE_ORIGINAL_RENDERQ=renderQ;
+const DANIEANA_IMAGE_ORIGINAL_CHOOSE=choose;
+
+start=async function(ids=null){
+  const selected=DANIEANA_IMAGE_ORIGINAL_CHOOSE(ids);
+  if(!selected?.length)return;
+  try{
+    await prepareQuestionImages(selected);
+  }catch(err){
+    console.error("Falha ao preparar imagens do simulado.",err);
+    alert("Não consegui baixar todas as imagens deste simulado. Verifique sua conexão e tente novamente.");
+    return;
+  }
+  choose=()=>selected;
+  try{
+    return await DANIEANA_IMAGE_ORIGINAL_START(ids);
+  }finally{
+    choose=DANIEANA_IMAGE_ORIGINAL_CHOOSE;
+  }
+};
+
+renderQ=function(...args){
+  const result=DANIEANA_IMAGE_ORIGINAL_RENDERQ(...args);
+  const q=S.session?.questions?.[S.session.current];
+  if(q)renderQuestionMedia(q);
+  return result;
+};
 
 function normalizedQuestionImages(q){
   let raw=[];
