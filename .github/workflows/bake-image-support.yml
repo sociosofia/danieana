@@ -8,6 +8,7 @@ on:
       - "scripts/patch_image_support.py"
       - "scripts/patch_image_dependent_batch_1.py"
       - "scripts/patch_report_docx_share.py"
+      - "scripts/stage_heloesthe_subsite.py"
       - ".github/workflows/bake-image-support.yml"
   workflow_dispatch:
 
@@ -27,7 +28,7 @@ jobs:
         with:
           ref: main
 
-      - name: Bake image support, approved image questions and DOCX report sharing into official PWA package
+      - name: Bake image support, DOCX reporting and HeloeSthe into official PWA package
         shell: bash
         run: |
           set -euo pipefail
@@ -48,6 +49,10 @@ jobs:
           fi
 
           MEDIA="$SITE_ROOT/media/image-dependent"
+          HELO="$SITE_ROOT/heloesthe"
+          ROOT_SHA="$(sha256sum "$INDEX" | awk '{print $1}')"
+
+          BASE_READY=0
           if grep -q 'id="danieana-image-support-style"' "$INDEX" \
             && grep -q 'const IMAGE_DEPENDENT_BATCH_1=' "$INDEX" \
             && grep -q 'const DANIEANA_DOCX_REPORT_SHARE_V1=true;' "$INDEX" \
@@ -56,7 +61,22 @@ jobs:
             && test -s "$MEDIA/q_4000037773.png" \
             && test -s "$MEDIA/q_4000305647.png" \
             && test -s "$MEDIA/q_4000084413.png"; then
-            echo "Image support, approved image-dependent batch and DOCX reporting are already baked into the package."
+            BASE_READY=1
+          fi
+
+          HELO_READY=0
+          if [ -f "$HELO/.source-sha" ] \
+            && [ "$(cat "$HELO/.source-sha")" = "$ROOT_SHA" ] \
+            && grep -q 'HeloeSthe' "$HELO/index.html" \
+            && grep -q 'Feito com afeto, para vocês. Estou na torcida!' "$HELO/index.html" \
+            && grep -q 'Compartilhar relatório DOCX' "$HELO/index.html" \
+            && test -s "$HELO/icons/icon-192.png" \
+            && test -s "$HELO/icons/icon-512.png"; then
+            HELO_READY=1
+          fi
+
+          if [ "$BASE_READY" = "1" ] && [ "$HELO_READY" = "1" ]; then
+            echo "DaniAna base and HeloeSthe subsite are already baked into the package."
             echo "BAKED=0" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -116,6 +136,57 @@ jobs:
             exit 1
           fi
 
+          # Recompute after any base patches; HeloeSthe must mirror this exact app revision.
+          ROOT_SHA="$(sha256sum "$INDEX" | awk '{print $1}')"
+          if [ ! -f "$HELO/.source-sha" ] \
+            || [ "$(cat "$HELO/.source-sha" 2>/dev/null || true)" != "$ROOT_SHA" ] \
+            || ! grep -q 'HeloeSthe' "$HELO/index.html" 2>/dev/null \
+            || ! grep -q 'Compartilhar relatório DOCX' "$HELO/index.html" 2>/dev/null; then
+            python3 scripts/stage_heloesthe_subsite.py "$SITE_ROOT" "$HELO"
+
+            curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+              "https://raw.githubusercontent.com/sociosofia/heloesthe/main/scripts/bootstrap_heloesthe.py" \
+              -o /tmp/bootstrap_heloesthe.py
+            python3 /tmp/bootstrap_heloesthe.py "$HELO"
+
+            mkdir -p "$HELO/icons"
+            curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+              "https://raw.githubusercontent.com/sociosofia/heloesthe/main/branding/icon-192.png.b64" \
+              | base64 -d > "$HELO/icons/icon-192.png"
+            curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+              "https://raw.githubusercontent.com/sociosofia/heloesthe/main/branding/icon-512.png.b64" \
+              | base64 -d > "$HELO/icons/icon-512.png"
+
+            printf '%s' "$ROOT_SHA" > "$HELO/.source-sha"
+          fi
+
+          test -f "$HELO/index.html"
+          grep -q 'HeloeSthe' "$HELO/index.html"
+          grep -q 'Feito com afeto, para vocês. Estou na torcida!' "$HELO/index.html"
+          grep -q 'heloesthe-local-storage-namespace' "$HELO/index.html"
+          grep -q 'Compartilhar relatório DOCX' "$HELO/index.html"
+          grep -q 'navigator.share' "$HELO/index.html"
+          file "$HELO/icons/icon-192.png" | grep -qi 'PNG image data, 192 x 192'
+          file "$HELO/icons/icon-512.png" | grep -qi 'PNG image data, 512 x 512'
+          if grep -q 'Simulados da Ana e Dani' "$HELO/index.html"; then
+            echo "Original Dani&Ana branding leaked into HeloeSthe." >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          candidates=list(Path('unpacked').glob('heloesthe/index.html')) + list(Path('unpacked').glob('*/heloesthe/index.html'))
+          if not candidates:
+              raise SystemExit('HeloeSthe index not found after bake')
+          s=candidates[0].read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',s,re.S|re.I)
+          if not scripts:
+              raise SystemExit('HeloeSthe inline application script not found')
+          Path('/tmp/heloesthe-main.js').write_text(max(scripts,key=len),encoding='utf-8')
+          PY
+          node --check /tmp/heloesthe-main.js
+
           rm -f "${ZIP}.new"
           (cd unpacked && zip -qr "../${ZIP}.new" .)
           mv "${ZIP}.new" "$ZIP"
@@ -130,5 +201,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- Simulados_Ana_Dani_Humanas_FINAL_PWA.zip
           git diff --cached --quiet && exit 0
-          git commit -m "Bake image support and DOCX report sharing into PWA package"
+          git commit -m "Bake DaniAna features and HeloeSthe subsite into PWA package"
           git push origin HEAD:main
