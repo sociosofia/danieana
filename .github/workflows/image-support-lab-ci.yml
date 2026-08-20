@@ -57,7 +57,7 @@ jobs:
           grep -q 'Baixando imagens das questões' _site/index.html
           grep -q 'QUESTION_IMAGE_CACHE="ana-dani-question-images-v1"' _site/index.html
           grep -q 'renderQuestionMedia(q);' _site/index.html
-          grep -q 'async function start(ids=null)' _site/index.html
+          grep -q 'start=async function(ids=null)' _site/index.html
           test -f _site/media/q_image_lab.svg
           python3 - <<'PY'
           from pathlib import Path
