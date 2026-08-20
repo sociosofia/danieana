@@ -1,0 +1,48 @@
+name: Inspect H-G migration snapshot v2
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/inspect_hg_v1_manifest.py"
+      - ".github/workflows/inspect-hg-manifest-v2.yml"
+      - "scripts/build_mass_image_bank.py"
+      - "scripts/patch_option_image_support.py"
+      - "scripts/patch_mass_image_bank_loader.py"
+      - "data/image-dependent-migration/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout laboratory branch
+        uses: actions/checkout@v6
+
+      - name: Fetch canonical H-G v1 snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://raw.githubusercontent.com/sociosofia/danieana/feature/image-dependent-mass-migration/data/image-dependent-migration/hg-v1.part01.b64" \
+            -o /tmp/hg-v1.part01.b64
+          test -s /tmp/hg-v1.part01.b64
+
+      - name: Inspect duplicates and residual quarantine
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/inspect_hg_v1_manifest.py /tmp/hg-v1.part01.b64 | tee hg-v1-inspection.txt
+          grep -q '^COUNTS ' hg-v1-inspection.txt
+          grep -q '^RESIDUAL_COUNT 29$' hg-v1-inspection.txt
+          grep -q '^DUP_COUNT 5$' hg-v1-inspection.txt
+
+      - name: Upload inspection report
+        uses: actions/upload-artifact@v4
+        with:
+          name: hg-v1-inspection
+          path: hg-v1-inspection.txt
+          retention-days: 7
