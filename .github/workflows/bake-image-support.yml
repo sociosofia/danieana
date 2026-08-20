@@ -1,0 +1,71 @@
+name: Bake Image Support into PWA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+      - "scripts/patch_image_support.py"
+      - ".github/workflows/bake-image-support.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bake-image-support
+  cancel-in-progress: true
+
+jobs:
+  bake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Bake image support into official PWA package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+          test -f "$ZIP"
+          rm -rf unpacked
+          mkdir unpacked
+          unzip -q "$ZIP" -d unpacked
+
+          if [ -f unpacked/index.html ]; then
+            INDEX="unpacked/index.html"
+          else
+            ROOT="$(find unpacked -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+            test -n "$ROOT" && test -f "$ROOT/index.html"
+            INDEX="$ROOT/index.html"
+          fi
+
+          if grep -q 'id="danieana-image-support-style"' "$INDEX"; then
+            echo "Image support is already baked into the package."
+            echo "BAKED=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          python3 scripts/patch_image_support.py "$INDEX"
+          grep -q 'QUESTION_IMAGE_CACHE="ana-dani-question-images-v1"' "$INDEX"
+          grep -q 'Baixando imagens das questões' "$INDEX"
+
+          rm -f "${ZIP}.new"
+          (cd unpacked && zip -qr "../${ZIP}.new" .)
+          mv "${ZIP}.new" "$ZIP"
+          echo "BAKED=1" >> "$GITHUB_ENV"
+
+      - name: Commit baked package
+        if: env.BAKED == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- Simulados_Ana_Dani_Humanas_FINAL_PWA.zip
+          git diff --cached --quiet && exit 0
+          git commit -m "Bake image support into PWA package"
+          git push origin HEAD:main
