@@ -1,4 +1,4 @@
-name: Image Support Lab CI
+name: Image Support Production CI
 
 on:
   push:
@@ -6,8 +6,6 @@ on:
       - feature/image-support-lab
     paths:
       - "scripts/patch_image_support.py"
-      - "scripts/patch_real_image_lab.py"
-      - "experiments/assets/q_image_lab.svg"
       - ".github/workflows/image-support-lab-ci.yml"
       - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
   pull_request:
@@ -15,8 +13,6 @@ on:
       - main
     paths:
       - "scripts/patch_image_support.py"
-      - "scripts/patch_real_image_lab.py"
-      - "experiments/assets/q_image_lab.svg"
       - ".github/workflows/image-support-lab-ci.yml"
       - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
   workflow_dispatch:
@@ -25,20 +21,20 @@ permissions:
   contents: read
 
 jobs:
-  build-lab:
+  validate-production:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Build current PWA package
+      - name: Build production candidate
         shell: bash
         run: |
           set -euo pipefail
           ZIP="Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
           test -f "$ZIP"
           rm -rf unpacked _site
-          mkdir -p unpacked _site/media
+          mkdir -p unpacked _site
           unzip -q "$ZIP" -d unpacked
           if [ -f unpacked/index.html ]; then
             cp -a unpacked/. _site/
@@ -48,47 +44,34 @@ jobs:
             cp -a "$ROOT"/. _site/
           fi
           test -f _site/index.html
-
-          # Synthetic control image already stored in the branch.
-          cp experiments/assets/q_image_lab.svg _site/media/q_image_lab.svg
-
-          # Real image from source question 4000245684. It is copied only into
-          # the ephemeral laboratory build, not committed to the repository.
-          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
-            "https://bq.drivedepobre.com/bq/img/83c94b0999c1ef9f4fd2ec709a1fb2fa2e2e5901.png" \
-            -o _site/media/q_4000245684.png
-          test -s _site/media/q_4000245684.png
-
           python3 scripts/patch_image_support.py _site/index.html
-          python3 scripts/patch_real_image_lab.py _site/index.html
 
-      - name: Validate patched app
+      - name: Validate production image support
         shell: bash
         run: |
           set -euo pipefail
           grep -q 'danieana-image-support-style' _site/index.html
           grep -q 'Baixando imagens das questões' _site/index.html
           grep -q 'QUESTION_IMAGE_CACHE="ana-dani-question-images-v1"' _site/index.html
-          grep -q 'renderQuestionMedia(q);' _site/index.html
           grep -q 'start=async function(...args)' _site/index.html
-          grep -q 'start(\[IMAGE_LAB_ID\],true)' _site/index.html
-          grep -q 'const REAL_IMAGE_LAB_ID="SOC-4000245684"' _site/index.html
-          grep -q 'sourceQuestionId:"4000245684"' _site/index.html
-          grep -q './media/q_4000245684.png' _site/index.html
-          grep -q 'start(\[REAL_IMAGE_LAB_ID\],true)' _site/index.html
-          test -f _site/media/q_image_lab.svg
-          test -s _site/media/q_4000245684.png
-          file _site/media/q_4000245684.png | grep -qi 'PNG image data'
+          grep -q 'renderQuestionMedia(q);' _site/index.html
+          if grep -q 'LAB-IMAGE-001' _site/index.html; then
+            echo 'Synthetic laboratory question leaked into production candidate.' >&2
+            exit 1
+          fi
+          if grep -q 'REAL_IMAGE_LAB_ID' _site/index.html; then
+            echo 'Real-question laboratory route leaked into production candidate.' >&2
+            exit 1
+          fi
           python3 - <<'PY'
           from pathlib import Path
           import re
           html=Path('_site/index.html').read_text(encoding='utf-8')
           app_start=html.index('function startHumanasApp(){')
           logic=html.index('const DANIEANA_IMAGE_ORIGINAL_START=start;')
-          real_lab=html.index('const REAL_IMAGE_LAB_ID="SOC-4000245684";')
           app_end=html.index('\n}\n\n\n(async()=>',app_start)
-          if not (app_start < logic < real_lab < app_end):
-              raise SystemExit('image support or real lab logic escaped startHumanasApp scope')
+          if not (app_start < logic < app_end):
+              raise SystemExit('image support logic escaped startHumanasApp scope')
           m=re.search(r'<script>\s*(function startHumanasApp\(\).*?)</script>',html,re.S)
           if not m:
               raise SystemExit('main application script not found')
@@ -96,9 +79,9 @@ jobs:
           PY
           node --check /tmp/danieana-app.js
 
-      - name: Upload laboratory build
+      - name: Upload production candidate
         uses: actions/upload-artifact@v4
         with:
-          name: danieana-image-support-lab
+          name: danieana-image-support-production-candidate
           path: _site
           retention-days: 7
