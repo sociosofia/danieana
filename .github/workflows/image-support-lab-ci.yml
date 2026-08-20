@@ -6,6 +6,7 @@ on:
       - feature/image-support-lab
     paths:
       - "scripts/patch_image_support.py"
+      - "scripts/patch_real_image_lab.py"
       - "experiments/assets/q_image_lab.svg"
       - ".github/workflows/image-support-lab-ci.yml"
       - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
@@ -14,6 +15,7 @@ on:
       - main
     paths:
       - "scripts/patch_image_support.py"
+      - "scripts/patch_real_image_lab.py"
       - "experiments/assets/q_image_lab.svg"
       - ".github/workflows/image-support-lab-ci.yml"
       - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
@@ -46,8 +48,19 @@ jobs:
             cp -a "$ROOT"/. _site/
           fi
           test -f _site/index.html
+
+          # Synthetic control image already stored in the branch.
           cp experiments/assets/q_image_lab.svg _site/media/q_image_lab.svg
+
+          # Real image from source question 4000245684. It is copied only into
+          # the ephemeral laboratory build, not committed to the repository.
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://bq.drivedepobre.com/bq/img/83c94b0999c1ef9f4fd2ec709a1fb2fa2e2e5901.png" \
+            -o _site/media/q_4000245684.png
+          test -s _site/media/q_4000245684.png
+
           python3 scripts/patch_image_support.py _site/index.html
+          python3 scripts/patch_real_image_lab.py _site/index.html
 
       - name: Validate patched app
         shell: bash
@@ -59,16 +72,23 @@ jobs:
           grep -q 'renderQuestionMedia(q);' _site/index.html
           grep -q 'start=async function(...args)' _site/index.html
           grep -q 'start(\[IMAGE_LAB_ID\],true)' _site/index.html
+          grep -q 'const REAL_IMAGE_LAB_ID="SOC-4000245684"' _site/index.html
+          grep -q 'sourceQuestionId:"4000245684"' _site/index.html
+          grep -q './media/q_4000245684.png' _site/index.html
+          grep -q 'start(\[REAL_IMAGE_LAB_ID\],true)' _site/index.html
           test -f _site/media/q_image_lab.svg
+          test -s _site/media/q_4000245684.png
+          file _site/media/q_4000245684.png | grep -qi 'PNG image data'
           python3 - <<'PY'
           from pathlib import Path
           import re
           html=Path('_site/index.html').read_text(encoding='utf-8')
           app_start=html.index('function startHumanasApp(){')
           logic=html.index('const DANIEANA_IMAGE_ORIGINAL_START=start;')
+          real_lab=html.index('const REAL_IMAGE_LAB_ID="SOC-4000245684";')
           app_end=html.index('\n}\n\n\n(async()=>',app_start)
-          if not (app_start < logic < app_end):
-              raise SystemExit('image support logic escaped startHumanasApp scope')
+          if not (app_start < logic < real_lab < app_end):
+              raise SystemExit('image support or real lab logic escaped startHumanasApp scope')
           m=re.search(r'<script>\s*(function startHumanasApp\(\).*?)</script>',html,re.S)
           if not m:
               raise SystemExit('main application script not found')
