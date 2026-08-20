@@ -12,6 +12,10 @@ SAMPLES = {
     "historia": "4000000782",
     "geografia": "4000001265",
 }
+KNOWN_TOPIC_IDS = {
+    "sociologia": "f7e83931-d18e-424e-b369-01a9d7dafceb",
+    "filosofia": "76ccc99b-eb61-4a6a-bc9b-7a4395af4a41",
+}
 
 UA = "DaniAnaImageMigrationInventory/1.0 (+https://github.com/sociosofia/danieana)"
 
@@ -67,7 +71,7 @@ def compact_shape(obj, depth=0):
 def main():
     out_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "mass-migration-probe")
     out_dir.mkdir(parents=True, exist_ok=True)
-    report = {"base": BASE, "samples": {}}
+    report = {"base": BASE, "known_topic_ids": KNOWN_TOPIC_IDS, "samples": {}}
     failures = []
     for discipline, qid in SAMPLES.items():
         url = f"{BASE}/q/{qid}"
