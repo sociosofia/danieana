@@ -7,6 +7,12 @@ on:
     paths:
       - "scripts/probe_mass_migration_source.py"
       - ".github/workflows/image-dependent-mass-inventory.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/probe_mass_migration_source.py"
+      - ".github/workflows/image-dependent-mass-inventory.yml"
   workflow_dispatch:
 
 permissions:
