@@ -1,0 +1,115 @@
+name: DOCX Report Share CI
+
+on:
+  push:
+    branches:
+      - feature/share-docx-report
+    paths:
+      - "scripts/patch_report_docx_share.py"
+      - ".github/workflows/report-docx-share-ci.yml"
+      - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/patch_report_docx_share.py"
+      - ".github/workflows/bake-image-support.yml"
+      - ".github/workflows/report-docx-share-ci.yml"
+      - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Patch current package
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _site unpacked
+          mkdir unpacked
+          unzip -q Simulados_Ana_Dani_Humanas_FINAL_PWA.zip -d unpacked
+          if [ -f unpacked/index.html ]; then
+            mkdir _site
+            cp -a unpacked/. _site/
+          else
+            ROOT="$(find unpacked -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+            test -n "$ROOT" && test -f "$ROOT/index.html"
+            mkdir _site
+            cp -a "$ROOT"/. _site/
+          fi
+          python3 scripts/patch_report_docx_share.py _site/index.html
+          grep -q 'const DANIEANA_DOCX_REPORT_SHARE_V1=true;' _site/index.html
+          grep -q 'Compartilhar relatório DOCX' _site/index.html
+          grep -q 'navigator.share' _site/index.html
+          grep -q 'navigator.canShare' _site/index.html
+          grep -q 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' _site/index.html
+          if grep -q 'Exportar relatório TXT para discussão' _site/index.html; then
+            echo "Legacy TXT report button is still present." >&2
+            exit 1
+          fi
+
+      - name: Validate application JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('_site/index.html').read_text(encoding='utf-8')
+          m=re.search(r'<script>\s*(function startHumanasApp\(\).*?)</script>',html,re.S)
+          if not m:
+              raise SystemExit('main application script not found')
+          Path('/tmp/danieana-report-app.js').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/danieana-report-app.js
+
+      - name: Generate and inspect a real DOCX with UTF-8 text
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          html=Path('_site/index.html').read_text(encoding='utf-8')
+          start=html.index('const DANIEANA_DOCX_REPORT_SHARE_V1=true;')
+          end=html.index('$("#wrong").onclick=()=>{',start)
+          block=html[start:end]
+          harness=r'''
+          const fs=require('fs');
+          const document={title:'Simulados da Ana e Dani',querySelector:()=>({textContent:'Simulados da Ana e Dani'})};
+          const selected=[{checked:true,dataset:{id:'q1'}}];
+          const $$=()=>selected;
+          const $=()=>({});
+          const fmt=()=> '1 min 23 s';
+          const confLabel=()=> 'Tive dúvida';
+          const discTitle=()=> 'Sociologia';
+          const doorFor=()=>({title:'Sociedade'});
+          const last={
+            label:'Ciências Humanas',date:'20/08/2026, 01:23:45',correct:0,n:1,secs:83,
+            details:[{id:'q1',number:1,ok:false,conf:'duvida',review:true,discipline:'sociologia',subtopic:'Ação social',origin:'Teste',text:'Questão sobre educação, ação e participação.',selectedLabel:'A',selectedText:'Opção incorreta',correctLabel:'B',correctText:'Opção correta',solution:'Resolução com discussão e reflexão crítica.'}]
+          };
+          '''
+          tail=r'''
+          buildTeacherReportDocxBlob().arrayBuffer().then(buf=>fs.writeFileSync('/tmp/relatorio_teste.docx',Buffer.from(buf)));
+          '''
+          Path('/tmp/test-docx.js').write_text(harness+block+tail,encoding='utf-8')
+          PY
+          node /tmp/test-docx.js
+          test -s /tmp/relatorio_teste.docx
+          unzip -t /tmp/relatorio_teste.docx
+          unzip -p /tmp/relatorio_teste.docx word/document.xml > /tmp/document.xml
+          grep -q 'Questão sobre educação, ação e participação' /tmp/document.xml
+          grep -q 'Resolução com discussão e reflexão crítica' /tmp/document.xml
+          grep -q 'RELATÓRIO PARA DISCUSSÃO COM O PROFESSOR' /tmp/document.xml
+
+      - name: Upload DOCX smoke-test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: danieana-docx-report-smoke-test
+          path: /tmp/relatorio_teste.docx
+          retention-days: 7
