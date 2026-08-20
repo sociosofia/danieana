@@ -15,7 +15,7 @@ missing = [marker for marker in required_markers if marker not in html]
 if missing:
     raise SystemExit("Image patch aborted: core markers not found: " + ", ".join(missing))
 
-injection = r'''
+ui_injection = r'''
 <style id="danieana-image-support-style">
 #imagePrep{
   position:fixed;inset:0;z-index:100000;display:none;place-items:center;
@@ -73,8 +73,9 @@ injection = r'''
   <button id="questionImageClose" type="button" aria-label="Fechar imagem ampliada">×</button>
   <img id="questionImageLarge" alt="">
 </div>
+'''
 
-<script id="danieana-image-support-script">
+logic_injection = r'''
 const QUESTION_IMAGE_CACHE="ana-dani-question-images-v1";
 let QUESTION_IMAGE_OBJECT_URLS=[];
 
@@ -82,7 +83,8 @@ const DANIEANA_IMAGE_ORIGINAL_START=start;
 const DANIEANA_IMAGE_ORIGINAL_RENDERQ=renderQ;
 const DANIEANA_IMAGE_ORIGINAL_CHOOSE=choose;
 
-start=async function(ids=null){
+start=async function(...args){
+  const ids=args[0]??null;
   const selected=DANIEANA_IMAGE_ORIGINAL_CHOOSE(ids);
   if(!selected?.length)return;
   try{
@@ -94,7 +96,7 @@ start=async function(ids=null){
   }
   choose=()=>selected;
   try{
-    return await DANIEANA_IMAGE_ORIGINAL_START(ids);
+    return await DANIEANA_IMAGE_ORIGINAL_START(...args);
   }finally{
     choose=DANIEANA_IMAGE_ORIGINAL_CHOOSE;
   }
@@ -196,6 +198,7 @@ function closeQuestionImage(){
 }
 
 async function renderQuestionMedia(q){
+  closeQuestionImage();
   let host=document.getElementById("questionMedia");
   if(!host){
     host=document.createElement("div");
@@ -291,15 +294,20 @@ async function launchQuestionImageLab(){
   if(params.get("imageLab")!=="1")return;
   if(!QUESTIONS.some(q=>q.id===IMAGE_LAB_ID))QUESTIONS.unshift(IMAGE_LAB_QUESTION);
   localStorage.removeItem(K.active);
-  S.mode="training";S.timer=false;S.count=1;S.fresh=false;
-  await start([IMAGE_LAB_ID]);
+  S.study="area";S.discipline="sociologia";S.format="training";S.timer=false;S.count=1;S.fresh=false;
+  await start([IMAGE_LAB_ID],true);
 }
 
 setTimeout(()=>{launchQuestionImageLab().catch(err=>console.error("Falha no laboratório de imagens.",err))},350);
-</script>
 '''
+
+core_anchor = html.rfind("\nupdateModePanels();")
+if core_anchor < 0:
+    raise SystemExit("Image patch aborted: startHumanasApp closing anchor not found.")
+html = html[:core_anchor] + "\n" + logic_injection + "\n" + html[core_anchor:]
+
 if "</body>" not in html:
     raise SystemExit("Image patch aborted: closing body tag not found.")
-html = html.replace("</body>", injection + "\n</body>", 1)
+html = html.replace("</body>", ui_injection + "\n</body>", 1)
 path.write_text(html, encoding="utf-8")
 print(f"Image support injected into {path}.")
