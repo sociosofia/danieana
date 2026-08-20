@@ -1,10 +1,14 @@
-name: Deploy Simulados da Ana e Dani
+name: Deploy DaniAna and HeloeSthe
 
 on:
   push:
     branches: [main]
     paths:
       - "Simulados_Ana_Dani_Humanas_FINAL_PWA.zip"
+      - "scripts/patch_safe_update.py"
+      - "scripts/stage_heloesthe_subsite.py"
+      - "scripts/patch_heloesthe_subsite.py"
+      - "branding/heloesthe/**"
       - ".github/workflows/deploy-simulados.yml"
   workflow_dispatch:
 
@@ -27,7 +31,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Prepare site from final PWA package
+      - name: Prepare DaniAna from official PWA package
         shell: bash
         run: |
           set -euo pipefail
@@ -40,55 +44,58 @@ jobs:
             cp -a unpacked/. _site/
           else
             ROOT="$(find unpacked -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-            test -n "$ROOT" && test -f "$ROOT/index.html" || { echo "index.html not found in package"; find unpacked -maxdepth 3 -type f | head -100; exit 1; }
+            test -n "$ROOT" && test -f "$ROOT/index.html" || {
+              echo "index.html not found in package"
+              find unpacked -maxdepth 3 -type f | head -100
+              exit 1
+            }
             cp -a "$ROOT"/. _site/
           fi
           test -f _site/index.html
+          grep -q 'const DANIEANA_DOCX_REPORT_SHARE_V1=true;' _site/index.html
+          grep -q 'Compartilhar relatório DOCX' _site/index.html
 
-      - name: Enable native report sharing
+      - name: Add safe DaniAna update system
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('_site/index.html')
-          s = p.read_text(encoding='utf-8')
-          s = s.replace('Exportar relatório TXT para discussão', 'Compartilhar relatório', 1)
-          old = '$("#exportTeacher").onclick=()=>{\n            if(!last)return;\n            const chosen=$$(".discCheck").filter(x=>x.checked).length;\n            if(!chosen){alert("Selecione pelo menos uma questão para discussão.");return}\n            const blob=new Blob([teacherReportText()],{type:"text/plain;charset=utf-8"});\n            const a=document.createElement("a");\n            a.href=URL.createObjectURL(blob);\n            a.download=`relatorio_discussao_professor_${new Date().toISOString().slice(0,10)}.txt`;\n            document.body.appendChild(a);a.click();a.remove();\n            setTimeout(()=>URL.revokeObjectURL(a.href),1000);\n          };'
-          new = '$("#exportTeacher").onclick=async()=>{\n            if(!last)return;\n            const chosen=$$(".discCheck").filter(x=>x.checked).length;\n            if(!chosen){alert("Selecione pelo menos uma questão para discussão.");return}\n            const report=teacherReportText();\n            const filename=`relatorio_discussao_professor_${new Date().toISOString().slice(0,10)}.txt`;\n            const file=new File([report],filename,{type:"text/plain"});\n            const title="Relatório de Ciências Humanas — Ana e Dani";\n            try{\n              if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){await navigator.share({title,text:"Relatório para discussão com o professor",files:[file]});return}\n              if(navigator.share){await navigator.share({title,text:report});return}\n            }catch(err){if(err?.name==="AbortError")return;console.warn("Compartilhamento nativo indisponível; usando download.",err)}\n            const blob=new Blob([report],{type:"text/plain;charset=utf-8"});\n            const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);\n          };'
-          if old in s:
-              s = s.replace(old, new, 1)
-          p.write_text(s, encoding='utf-8')
-          PY
+          set -euo pipefail
+          python3 scripts/patch_safe_update.py _site "$GITHUB_SHA"
 
-      - name: Add safe app update system
+      - name: Build isolated HeloeSthe subsite
         shell: bash
         run: |
+          set -euo pipefail
+          python3 scripts/stage_heloesthe_subsite.py _site _site/heloesthe
+          python3 scripts/patch_heloesthe_subsite.py _site/heloesthe
+
+          mkdir -p _site/heloesthe/icons
+          base64 -d branding/heloesthe/icon-192.png.b64 > _site/heloesthe/icons/icon-192.png
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+            "https://raw.githubusercontent.com/sociosofia/heloesthe/main/branding/icon-512.png.b64" \
+            | base64 -d > _site/heloesthe/icons/icon-512.png
+
+          file _site/heloesthe/icons/icon-192.png | grep -qi 'PNG image data, 192 x 192'
+          file _site/heloesthe/icons/icon-512.png | grep -qi 'PNG image data, 512 x 512'
+          grep -q 'HeloeSthe' _site/heloesthe/index.html
+          grep -q 'Feito com afeto, para vocês. Estou na torcida!' _site/heloesthe/index.html
+          grep -q 'heloesthe-local-storage-namespace' _site/heloesthe/index.html
+          grep -q 'Compartilhar relatório DOCX' _site/heloesthe/index.html
+          grep -q 'navigator.share' _site/heloesthe/index.html
+          if grep -q 'Simulados da Ana e Dani' _site/heloesthe/index.html; then
+            echo 'DaniAna branding leaked into HeloeSthe.' >&2
+            exit 1
+          fi
+
           python3 - <<'PY'
           from pathlib import Path
-          import base64, os, re
-          version = os.environ.get('GITHUB_SHA', 'local')[:12]
-          sw_path = Path('_site/sw.js')
-          sw = sw_path.read_text(encoding='utf-8')
-          sw = re.sub(r'const CACHE_NAME="[^"]+";', f'const CACHE_PREFIX="ana-dani-humanas-";\nconst CACHE_NAME=CACHE_PREFIX+"{version}";', sw, count=1)
-          sw = sw.replace('  self.skipWaiting();\n', '').replace('self.skipWaiting();\n', '')
-          sw = re.sub(r'caches\.keys\(\)\.then\(keys=>Promise\.all\(keys\.filter\(k=>k!==CACHE_NAME\)\.map\(k=>caches\.delete\(k\)\)\)\)', 'caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith(CACHE_PREFIX) && k!==CACHE_NAME).map(k=>caches.delete(k))))', sw, count=1)
-          if 'SKIP_WAITING' not in sw:
-              marker = 'self.addEventListener("fetch",event=>{'
-              handler = '\nself.addEventListener("message",event=>{\n  if(event.data?.type==="SKIP_WAITING") self.skipWaiting();\n});\n\n'
-              if marker not in sw:
-                  raise SystemExit('fetch handler marker not found')
-              sw = sw.replace(marker, handler + marker, 1)
-          sw_path.write_text(sw, encoding='utf-8')
-          html_path = Path('_site/index.html')
-          html = html_path.read_text(encoding='utf-8')
-          updater = base64.b64decode('CjxzdHlsZSBpZD0iZGFuaWVhbmEtdXBkYXRlLXN0eWxlIj4KI2RhbmllYW5hVXBkYXRle3Bvc2l0aW9uOmZpeGVkO2xlZnQ6NTAlO2JvdHRvbToxNnB4O3RyYW5zZm9ybTp0cmFuc2xhdGVYKC01MCUpO3otaW5kZXg6OTk5OTk7ZGlzcGxheTpub25lO2FsaWduLWl0ZW1zOmNlbnRlcjtnYXA6OHB4O21heC13aWR0aDpjYWxjKDEwMHZ3IC0gMjRweCk7cGFkZGluZzo4cHggMTBweCA4cHggMTJweDtib3JkZXI6MXB4IHNvbGlkIHJnYmEoMjQsMzIsNTEsLjE0KTtib3JkZXItcmFkaXVzOjk5OXB4O2JhY2tncm91bmQ6I2ZmZjtib3gtc2hhZG93OjAgOHB4IDI4cHggcmdiYSgyNCwzMiw1MSwuMTgpO2ZvbnQ6NjAwIDEzcHgvMS4yIHN5c3RlbS11aSwtYXBwbGUtc3lzdGVtLEJsaW5rTWFjU3lzdGVtRm9udCwiU2Vnb2UgVUkiLHNhbnMtc2VyaWY7Y29sb3I6IzE4MjAzM30KI2RhbmllYW5hVXBkYXRlLnNob3d7ZGlzcGxheTpmbGV4fQojZGFuaWVhbmFVcGRhdGUgYnV0dG9ue2JvcmRlcjowO2JvcmRlci1yYWRpdXM6OTk5cHg7YmFja2dyb3VuZDojMTgyMDMzO2NvbG9yOiNmZmY7cGFkZGluZzo3cHggMTBweDtmb250OjcwMCAxMnB4LzEgc3lzdGVtLXVpLC1hcHBsZS1zeXN0ZW0sQmxpbmtNYWNTeXN0ZW1Gb250LCJTZWdvZSBVSSIsc2Fucy1zZXJpZjtjdXJzb3I6cG9pbnRlcn0KPC9zdHlsZT4KPGRpdiBpZD0iZGFuaWVhbmFVcGRhdGUiIHJvbGU9InN0YXR1cyIgYXJpYS1saXZlPSJwb2xpdGUiPjxzcGFuPvCfqKggVGVtIG5vdmlkYWRlPC9zcGFuPjxidXR0b24gaWQ9ImRhbmllYW5hVXBkYXRlQnRuIiB0eXBlPSJidXR0b24iPkF0dWFsaXphcjwvYnV0dG9uPjwvZGl2Pgo8c2NyaXB0IGlkPSJkYW5pZWFuYS11cGRhdGUtc2NyaXB0Ij4KKCgpPT57CiAgaWYoISgic2VydmljZVdvcmtlciIgaW4gbmF2aWdhdG9yKSlyZXR1cm47CiAgY29uc3QgYm94PWRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJkYW5pZWFuYVVwZGF0ZSIpOwogIGNvbnN0IGJ0bj1kb2N1bWVudC5nZXRFbGVtZW50QnlJZCgiZGFuaWVhbmFVcGRhdGVCdG4iKTsKICBsZXQgd2FpdGluZz1udWxsOwogIGxldCByZWxvYWRpbmc9ZmFsc2U7CgogIGNvbnN0IHNob3c9d29ya2VyPT57CiAgICBpZighd29ya2VyKXJldHVybjsKICAgIHdhaXRpbmc9d29ya2VyOwogICAgYm94Py5jbGFzc0xpc3QuYWRkKCJzaG93Iik7CiAgfTsKCiAgY29uc3Qgd2F0Y2g9cmVnPT57CiAgICBpZihyZWcud2FpdGluZyAmJiBuYXZpZ2F0b3Iuc2VydmljZVdvcmtlci5jb250cm9sbGVyKXNob3cocmVnLndhaXRpbmcpOwogICAgcmVnLmFkZEV2ZW50TGlzdGVuZXIoInVwZGF0ZWZvdW5kIiwoKT0+ewogICAgICBjb25zdCB3b3JrZXI9cmVnLmluc3RhbGxpbmc7CiAgICAgIGlmKCF3b3JrZXIpcmV0dXJuOwogICAgICB3b3JrZXIuYWRkRXZlbnRMaXN0ZW5lcigic3RhdGVjaGFuZ2UiLCgpPT57CiAgICAgICAgaWYod29ya2VyLnN0YXRlPT09Imluc3RhbGxlZCIgJiYgbmF2aWdhdG9yLnNlcnZpY2VXb3JrZXIuY29udHJvbGxlcilzaG93KHdvcmtlcik7CiAgICAgIH0pOwogICAgfSk7CiAgfTsKCiAgbmF2aWdhdG9yLnNlcnZpY2VXb3JrZXIuYWRkRXZlbnRMaXN0ZW5lcigiY29udHJvbGxlcmNoYW5nZSIsKCk9PnsKICAgIGlmKHJlbG9hZGluZylyZXR1cm47CiAgICByZWxvYWRpbmc9dHJ1ZTsKICAgIGxvY2F0aW9uLnJlbG9hZCgpOwogIH0pOwoKICBidG4/LmFkZEV2ZW50TGlzdGVuZXIoImNsaWNrIiwoKT0+ewogICAgaWYod2FpdGluZyl7CiAgICAgIGJ0bi5kaXNhYmxlZD10cnVlOwogICAgICBidG4udGV4dENvbnRlbnQ9IkF0dWFsaXphbmRv4oCmIjsKICAgICAgd2FpdGluZy5wb3N0TWVzc2FnZSh7dHlwZToiU0tJUF9XQUlUSU5HIn0pOwogICAgfQogIH0pOwoKICB3aW5kb3cuYWRkRXZlbnRMaXN0ZW5lcigibG9hZCIsYXN5bmMoKT0+ewogICAgdHJ5ewogICAgICBjb25zdCByZWc9KGF3YWl0IG5hdmlnYXRvci5zZXJ2aWNlV29ya2VyLmdldFJlZ2lzdHJhdGlvbigpKSB8fCAoYXdhaXQgbmF2aWdhdG9yLnNlcnZpY2VXb3JrZXIucmVnaXN0ZXIoIi4vc3cuanMiKSk7CiAgICAgIHdhdGNoKHJlZyk7CiAgICAgIHJlZy51cGRhdGUoKS5jYXRjaCgoKT0+e30pOwogICAgICBzZXRJbnRlcnZhbCgoKT0+cmVnLnVwZGF0ZSgpLmNhdGNoKCgpPT57fSksNjAqNjAqMTAwMCk7CiAgICB9Y2F0Y2goZXJyKXsKICAgICAgY29uc29sZS53YXJuKCJWZXJpZmljYcOnw6NvIGRlIGF0dWFsaXphw6fDo28gaW5kaXNwb27DrXZlbC4iLGVycik7CiAgICB9CiAgfSk7Cn0pKCk7Cjwvc2NyaXB0Pgo=').decode('utf-8')
-          if 'id="danieana-update-script"' not in html:
-              if '</body>' not in html:
-                  raise SystemExit('closing body tag not found')
-              html = html.replace('</body>', updater + '\n</body>', 1)
-          html_path.write_text(html, encoding='utf-8')
-          print('App update version:', version)
+          import re
+          html=Path('_site/heloesthe/index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',html,re.S|re.I)
+          if not scripts:
+              raise SystemExit('No HeloeSthe inline application script found')
+          Path('/tmp/heloesthe-main.js').write_text(max(scripts,key=len),encoding='utf-8')
           PY
+          node --check /tmp/heloesthe-main.js
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
