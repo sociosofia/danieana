@@ -5,7 +5,7 @@ import sys
 path = Path(sys.argv[1] if len(sys.argv) > 1 else "_site/index.html")
 html = path.read_text(encoding="utf-8")
 
-STYLE_ID = 'danieana-image-support-style'
+STYLE_ID = "danieana-image-support-style"
 if f'id="{STYLE_ID}"' in html:
     print("Image support already present; nothing to do.")
     raise SystemExit(0)
@@ -259,46 +259,6 @@ document.getElementById("questionImageLightbox")?.addEventListener("click",ev=>{
   if(ev.target.id==="questionImageLightbox"||ev.target.id==="questionImageLarge")closeQuestionImage();
 });
 document.addEventListener("keydown",ev=>{if(ev.key==="Escape")closeQuestionImage()});
-
-const IMAGE_LAB_ID="LAB-IMAGE-001";
-const IMAGE_LAB_QUESTION={
-  id:IMAGE_LAB_ID,
-  sourceQuestionId:"LAB-IMAGE-001",
-  discipline:"sociologia",
-  text:"Observe o gráfico experimental e assinale a alternativa que descreve corretamente a tendência apresentada.",
-  support:"",
-  images:[{
-    url:"./media/q_image_lab.svg",
-    context:"enunciado",
-    alt:"Gráfico experimental com três barras de valores crescentes"
-  }],
-  options:[
-    {label:"A",text:"Os valores diminuem continuamente."},
-    {label:"B",text:"Os valores permanecem iguais."},
-    {label:"C",text:"Os valores aumentam da primeira para a terceira barra."},
-    {label:"D",text:"A terceira barra é menor que a primeira."}
-  ],
-  correct:2,
-  gabarito:"C",
-  category:"sociedade",
-  subtopic:"Laboratório de imagens",
-  origin:"Dani&Ana · laboratório",
-  institution:"Dani&Ana",
-  year:2026,
-  difficulty_band:"Teste",
-  solution:"A terceira barra é a maior; portanto, a alternativa C descreve a tendência do gráfico."
-};
-
-async function launchQuestionImageLab(){
-  const params=new URLSearchParams(location.search);
-  if(params.get("imageLab")!=="1")return;
-  if(!QUESTIONS.some(q=>q.id===IMAGE_LAB_ID))QUESTIONS.unshift(IMAGE_LAB_QUESTION);
-  localStorage.removeItem(K.active);
-  S.study="area";S.discipline="sociologia";S.format="training";S.timer=false;S.count=1;S.fresh=false;
-  await start([IMAGE_LAB_ID],true);
-}
-
-setTimeout(()=>{launchQuestionImageLab().catch(err=>console.error("Falha no laboratório de imagens.",err))},350);
 '''
 
 core_anchor = html.rfind("\nupdateModePanels();")
