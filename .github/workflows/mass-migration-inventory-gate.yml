@@ -4,8 +4,9 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "scripts/probe_mass_migration_source.py"
-      - "scripts/inventory_image_dependent_mass.py"
+      - "scripts/build_mass_image_bank.py"
+      - "scripts/patch_option_image_support.py"
+      - "scripts/patch_mass_image_bank_loader.py"
       - "data/image-dependent-migration/**"
       - ".github/workflows/image-dependent-mass-inventory.yml"
       - ".github/workflows/mass-migration-inventory-gate.yml"
@@ -15,25 +16,43 @@ permissions:
   contents: read
 
 jobs:
-  source-probe:
+  local-inventory:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR candidate
         uses: actions/checkout@v6
 
-      - name: Probe source API
+      - name: Validate frozen migration manifest
+        shell: bash
         run: |
           set -euo pipefail
-          test -f scripts/probe_mass_migration_source.py
-          python3 scripts/probe_mass_migration_source.py mass-migration-probe | tee mass-migration-probe.log
+          test -f scripts/build_mass_image_bank.py
+          test -d data/image-dependent-migration
+          rm -rf /tmp/danieana-mass-inventory
+          mkdir -p /tmp/danieana-mass-inventory
+          python3 scripts/build_mass_image_bank.py \
+            --site /tmp/danieana-mass-inventory \
+            --parts-dir data/image-dependent-migration \
+            --skip-downloads \
+            --report mass-migration-structure-report.json
+          test -s /tmp/danieana-mass-inventory/banks/image-migrated.js
+          python3 - <<'PY'
+          import json
+          r=json.load(open('mass-migration-structure-report.json',encoding='utf-8'))
+          assert r['questions'] == 324, r
+          assert r['by_discipline'].get('historia') == 200, r
+          assert r['by_discipline'].get('geografia') == 124, r
+          assert r['questions_with_visible_media'] == 109, r
+          assert r['assets'] == 525, r
+          assert r['residual'] == 29, r
+          print('Frozen H/G migration manifest validated:', r['questions'], 'questions,', r['assets'], 'assets,', r['residual'], 'residual.')
+          PY
 
-      - name: Upload source probe
+      - name: Upload inventory report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: danieana-mass-migration-source-probe
-          path: |
-            mass-migration-probe
-            mass-migration-probe.log
+          name: danieana-mass-migration-inventory
+          path: mass-migration-structure-report.json
           retention-days: 7
