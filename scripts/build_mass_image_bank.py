@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import argparse, base64, gzip, json, urllib.request
+import argparse, base64, lzma, json, urllib.request
 
 UA='DaniAnaMassImageMigration/1.2 (+https://github.com/sociosofia/danieana)'
 
 def load_manifest(parts_dir:Path):
-    parts=sorted(parts_dir.glob('hg-v1.part*.b64'))
+    parts=sorted(parts_dir.glob('hg-v12.part*.b64'))
     if not parts:
         raise SystemExit(f'No migration manifest parts found in {parts_dir}')
     payload=''.join(p.read_text(encoding='utf-8').strip() for p in parts)
     try:
-        return json.loads(gzip.decompress(base64.b64decode(payload)).decode('utf-8'))
+        return json.loads(lzma.decompress(base64.b64decode(payload)).decode('utf-8'))
     except Exception as exc:
         raise SystemExit(f'Could not decode migration manifest: {exc}')
 
